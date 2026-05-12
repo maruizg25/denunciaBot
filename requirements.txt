@@ -1,0 +1,58 @@
+# ============================================================================
+# DenunciaBot — Dependencias de producción
+# Python 3.11+ requerido
+# ----------------------------------------------------------------------------
+# Instalación local (macOS / desarrollo):
+#   python3.11 -m venv .venv && source .venv/bin/activate
+#   pip install --upgrade pip
+#   pip install -r requirements.txt
+#
+# Instalación en RHEL 9.7 (producción):
+#   sudo dnf install -y python3.11 python3.11-devel python3.11-pip \
+#                       gcc gcc-c++ openssl-devel libffi-devel \
+#                       postgresql-devel make
+#   python3.11 -m venv .venv && source .venv/bin/activate
+#   pip install --upgrade pip
+#   pip install -r requirements.txt
+# ============================================================================
+
+# ---- Framework web y servidor ASGI ----------------------------------------
+fastapi==0.115.6
+uvicorn[standard]==0.32.1
+gunicorn==23.0.0
+
+# ---- Validación y configuración -------------------------------------------
+pydantic==2.10.4
+pydantic-settings==2.7.0
+email-validator==2.2.0
+
+# ---- Base de datos --------------------------------------------------------
+sqlalchemy[asyncio]==2.0.36
+asyncpg==0.30.0
+alembic==1.14.0
+greenlet==3.1.1
+
+# ---- Redis + cola de tareas -----------------------------------------------
+redis==5.2.1
+dramatiq[redis,watch]==1.17.1
+
+# ---- Cliente HTTP ---------------------------------------------------------
+httpx==0.28.1
+
+# ---- Seguridad: cifrado simétrico y firmas --------------------------------
+cryptography==44.0.0
+
+# ---- Multipart / archivos -------------------------------------------------
+python-multipart==0.0.20
+
+# ---- Logging estructurado -------------------------------------------------
+structlog==24.4.0
+
+# ---- Rate limiting --------------------------------------------------------
+slowapi==0.1.9
+
+# ---- Antivirus (cliente clamd) — escaneo de evidencias --------------------
+clamd==1.0.2
+
+# ---- Utilidades -----------------------------------------------------------
+python-dotenv==1.0.1

@@ -1,0 +1,86 @@
+# =============================================================================
+# DenunciaBot — Unit systemd para el servicio API (FastAPI + gunicorn)
+# -----------------------------------------------------------------------------
+# Instalación:
+#   sudo cp denunciabot.service /etc/systemd/system/
+#   sudo systemctl daemon-reload
+#   sudo systemctl enable --now denunciabot.service
+#
+# Monitoreo:
+#   sudo systemctl status denunciabot
+#   sudo journalctl -u denunciabot -f
+#
+# NOTA: este unit corre SOLO el API. El worker que procesa la cola de
+# notificaciones SMTP vive en `denunciabot-worker.service`. Ambos deben
+# estar activos en producción.
+#
+# Ajustar antes de desplegar:
+#   - User/Group: el usuario UNIX que dueñe el venv y los logs.
+#   - WorkingDirectory: ruta absoluta donde está el código.
+#   - EnvironmentFile: el .env con todos los secretos.
+# =============================================================================
+
+[Unit]
+Description=DenunciaBot API — Bot de denuncias ciudadanas (SERCOP / Integridad Pública)
+Documentation=https://github.com/sercop-ec/denunciabot
+After=network-online.target postgresql.service redis.service
+Wants=network-online.target postgresql.service redis.service
+
+[Service]
+Type=notify
+User=denunciabot
+Group=denunciabot
+
+WorkingDirectory=/opt/denunciabot
+EnvironmentFile=/opt/denunciabot/.env
+
+# Gunicorn con 2 workers Uvicorn — suficiente para volumen institucional.
+# Aumentar `-w` solo si los logs muestran saturación sostenida.
+ExecStart=/opt/denunciabot/.venv/bin/gunicorn app.main:app \
+    --workers 2 \
+    --worker-class uvicorn.workers.UvicornWorker \
+    --bind 127.0.0.1:8000 \
+    --timeout 30 \
+    --graceful-timeout 30 \
+    --keep-alive 5 \
+    --max-requests 1000 \
+    --max-requests-jitter 100 \
+    --access-logfile - \
+    --error-logfile -
+
+# Reinicio automático ante fallas, con backoff básico.
+Restart=on-failure
+RestartSec=5s
+TimeoutStopSec=30s
+
+# Recarga en caliente (kill -HUP) para rotación de logs sin reinicio.
+ExecReload=/bin/kill -HUP $MAINPID
+
+# ----- Hardening (defensa en profundidad) ------------------------------------
+NoNewPrivileges=yes
+PrivateTmp=yes
+ProtectSystem=strict
+ProtectHome=yes
+ProtectKernelTunables=yes
+ProtectKernelModules=yes
+ProtectControlGroups=yes
+ProtectHostname=yes
+RestrictRealtime=yes
+RestrictSUIDSGID=yes
+LockPersonality=yes
+MemoryDenyWriteExecute=yes
+
+# Solo permitimos escribir en el WorkingDirectory y en el directorio de
+# evidencias (configurable). PrivateTmp ya provee /tmp aislado.
+ReadWritePaths=/opt/denunciabot /var/lib/denunciabot
+
+# Limites de recursos
+LimitNOFILE=4096
+
+# Logs a journald
+StandardOutput=journal
+StandardError=journal
+SyslogIdentifier=denunciabot
+
+[Install]
+WantedBy=multi-user.target

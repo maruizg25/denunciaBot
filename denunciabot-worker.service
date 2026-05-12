@@ -1,0 +1,61 @@
+# =============================================================================
+# DenunciaBot — Unit systemd para el worker Dramatiq (notificaciones SMTP)
+# -----------------------------------------------------------------------------
+# Procesa la cola `notificaciones` que el API encola al cerrar cada denuncia.
+# Sin este servicio, los correos al buzón institucional NUNCA se envían.
+#
+# Instalación:
+#   sudo cp denunciabot-worker.service /etc/systemd/system/
+#   sudo systemctl daemon-reload
+#   sudo systemctl enable --now denunciabot-worker.service
+# =============================================================================
+
+[Unit]
+Description=DenunciaBot Worker — Procesador de notificaciones SMTP (Dramatiq)
+Documentation=https://github.com/sercop-ec/denunciabot
+After=network-online.target redis.service
+Wants=network-online.target redis.service
+# Si el API se reinicia, el worker no necesita reiniciarse.
+
+[Service]
+Type=simple
+User=denunciabot
+Group=denunciabot
+
+WorkingDirectory=/opt/denunciabot
+EnvironmentFile=/opt/denunciabot/.env
+
+# Dramatiq con 1 proceso y 2 threads — suficiente para volumen institucional.
+# Procesa SOLO la cola "notificaciones" (las únicas que produce el bot).
+ExecStart=/opt/denunciabot/.venv/bin/dramatiq \
+    app.services.notificacion_service \
+    --processes 1 \
+    --threads 2 \
+    --queues notificaciones
+
+Restart=on-failure
+RestartSec=10s
+TimeoutStopSec=30s
+
+# ----- Hardening (igual al API) ----------------------------------------------
+NoNewPrivileges=yes
+PrivateTmp=yes
+ProtectSystem=strict
+ProtectHome=yes
+ProtectKernelTunables=yes
+ProtectKernelModules=yes
+ProtectControlGroups=yes
+ProtectHostname=yes
+RestrictRealtime=yes
+RestrictSUIDSGID=yes
+LockPersonality=yes
+
+# El worker no escribe archivos (solo lee de Redis, manda SMTP); sin ReadWritePaths.
+LimitNOFILE=2048
+
+StandardOutput=journal
+StandardError=journal
+SyslogIdentifier=denunciabot-worker
+
+[Install]
+WantedBy=multi-user.target
