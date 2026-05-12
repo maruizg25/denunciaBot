@@ -47,17 +47,55 @@ equipo de seguridad de SERCOP).
 
 ## Requisitos
 
-### Desarrollo local (macOS)
-
 - Python 3.11+
-- PostgreSQL 16
-- Redis 7
-- `brew install python@3.11 postgresql@16 redis`
+- PostgreSQL 16 (local con Docker en dev; en el servidor RHEL ya instalado)
+- Redis 7 (igual: Docker en dev, paquete RPM en prod)
+- Docker Desktop (solo para dev en macOS) — o instala Postgres y Redis con `brew`
+- ClamAV (opcional, recomendado en producción)
 
-### Producción (RHEL 9.7)
+## Instalación
 
-PostgreSQL 16 ya está instalado en el servidor. Falta agregar Python 3.11 (Sercobot
-usa 3.8, no se toca):
+### Quickstart en macOS (desarrollo, con Docker)
+
+El stack local usa Docker para PostgreSQL y Redis — no hace falta instalarlos
+con brew. Solo necesitas Python 3.11+ y Docker Desktop.
+
+```bash
+# 1. Clonar y entrar
+git clone <repo> denunciabot && cd denunciabot
+
+# 2. Crear venv e instalar dependencias (producción + dev)
+make install-dev
+
+# 3. Levantar PostgreSQL y Redis con Docker
+make up
+
+# 4. Configurar .env
+cp .env.example .env
+# Generar claves criptográficas (copia los valores al .env):
+python -c "from cryptography.fernet import Fernet; print('MASTER_KEY:', Fernet.generate_key().decode())"
+python -c "import secrets; print('PEPPER:', secrets.token_urlsafe(32))"
+# Editar .env con esos valores + credenciales de Meta + SMTP
+
+# 5. Inicializar la BD (corre migraciones + verifica triggers)
+make init-db
+
+# 6. Correr tests
+make test
+
+# 7. Levantar el bot (en una terminal)
+make run
+
+# 8. Levantar el worker SMTP (en otra terminal)
+make worker
+```
+
+Lista completa de comandos: `make help`.
+
+### Instalación en producción (RHEL 9.7)
+
+PostgreSQL 16 ya está instalado en el servidor. Falta agregar Python 3.11
+(Sercobot usa 3.8, no se toca):
 
 ```bash
 sudo dnf install -y python3.11 python3.11-devel python3.11-pip \
@@ -73,36 +111,20 @@ sudo freshclam
 sudo systemctl enable --now clamd@scan
 ```
 
-## Instalación
+Luego clonar el repo, crear venv, configurar `.env`, copiar los units
+systemd y arrancar:
 
 ```bash
-# 1. Clonar y entrar al directorio
-git clone <repo> denunciabot && cd denunciabot
-
-# 2. Crear entorno virtual
-python3.11 -m venv .venv
-source .venv/bin/activate
-
-# 3. Instalar dependencias
-pip install --upgrade pip
+cd /opt/denunciabot
+python3.11 -m venv .venv && source .venv/bin/activate
 pip install -r requirements.txt
-
-# 4. Configurar variables de entorno
 cp .env.example .env
-# Generar la clave maestra Fernet:
-python -c "from cryptography.fernet import Fernet; print(Fernet.generate_key().decode())"
-# Generar el pepper para hash de teléfonos:
-python -c "import secrets; print(secrets.token_urlsafe(32))"
-# Editar .env y completar todos los valores
-
-# 5. Crear base de datos
-createdb denunciabot
-
-# 6. Correr migraciones
-alembic upgrade head
-
-# 7. Levantar el servicio
-uvicorn app.main:app --host 127.0.0.1 --port 8000 --reload
+# (editar .env con secretos reales y permisos 0o600)
+python scripts/init_db.py
+sudo cp denunciabot.service denunciabot-worker.service /etc/systemd/system/
+sudo systemctl daemon-reload
+sudo systemctl enable --now denunciabot denunciabot-worker
+sudo systemctl status denunciabot
 ```
 
 ## Variables de entorno

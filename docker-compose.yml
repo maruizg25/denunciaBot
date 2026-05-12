@@ -1,0 +1,63 @@
+# ============================================================================
+# DenunciaBot — Stack local de desarrollo (solo PostgreSQL + Redis)
+# ----------------------------------------------------------------------------
+# Pensado para tu MacBook M5 — levanta las dependencias externas sin
+# requerir `brew install postgresql redis`. La aplicación FastAPI y el
+# worker Dramatiq se siguen corriendo desde tu venv local.
+#
+# Uso:
+#   docker compose up -d              # Levanta postgres + redis
+#   docker compose down               # Para los servicios (preserva datos)
+#   docker compose down -v            # Para y BORRA volúmenes (CUIDADO)
+#   docker compose logs -f postgres   # Sigue los logs
+#
+# Conexión desde la app:
+#   DATABASE_URL=postgresql+asyncpg://denunciabot:dev@localhost:5432/denunciabot
+#   REDIS_URL=redis://localhost:6379/0
+#
+# NO usar este archivo en producción — sin TLS, sin secretos reales,
+# contraseñas en claro. En producción la BD es la del servidor RHEL.
+# ============================================================================
+
+services:
+  postgres:
+    image: postgres:16-alpine
+    container_name: denunciabot-postgres-dev
+    environment:
+      POSTGRES_USER: denunciabot
+      POSTGRES_PASSWORD: dev
+      POSTGRES_DB: denunciabot
+      # Acelera el arranque en dev (NO usar en prod)
+      POSTGRES_INITDB_ARGS: "--auth-host=scram-sha-256"
+    ports:
+      - "5432:5432"
+    volumes:
+      - postgres-data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD", "pg_isready", "-U", "denunciabot", "-d", "denunciabot"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+    restart: unless-stopped
+
+  redis:
+    image: redis:7-alpine
+    container_name: denunciabot-redis-dev
+    ports:
+      - "6379:6379"
+    volumes:
+      - redis-data:/data
+    # appendonly para persistir entre reinicios del contenedor
+    command: ["redis-server", "--appendonly", "yes"]
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+    restart: unless-stopped
+
+volumes:
+  postgres-data:
+    name: denunciabot-postgres-data
+  redis-data:
+    name: denunciabot-redis-data
