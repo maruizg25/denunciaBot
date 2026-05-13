@@ -36,6 +36,12 @@ from app.conversacion.motor import EvidenciaEntrante, Mensaje, procesar_mensaje
 from app.core.meta_client import MetaAPIError, get_meta_client
 from app.core.security import correlacion_log, get_crypto, validar_firma_meta
 from app.database import get_db
+from app.metrics import (
+    EVIDENCIAS_RECIBIDAS,
+    MENSAJES_DUPLICADOS,
+    WEBHOOK_DURATION,
+    WEBHOOK_REQUESTS,
+)
 from app.schemas.meta import MetaMessage, MetaWebhookPayload
 from app.services.evidencia_service import ClamAVError, escanear_con_clamav
 from app.services.idempotency_service import intentar_marcar_procesado
@@ -94,45 +100,50 @@ async def recibir_webhook(
     Rate limit configurable vía `RATE_LIMIT_WEBHOOK` en .env (default 120/min
     por IP). Si se excede, slowapi devuelve 429 sin invocar este handler.
     """
-    cuerpo = await request.body()
+    with WEBHOOK_DURATION.time():
+        cuerpo = await request.body()
 
-    # 1) Validar firma HMAC sobre el cuerpo CRUDO antes de cualquier parseo.
-    if not validar_firma_meta(cuerpo, x_hub_signature_256):
-        log.warning(
-            "webhook_firma_invalida",
-            firma_presente=bool(x_hub_signature_256),
-        )
-        raise HTTPException(status_code=401, detail="Firma inválida")
-
-    # 2) Parsear payload. Si es malformado, ignoramos y respondemos 200
-    #    para que Meta no reintente.
-    try:
-        payload = MetaWebhookPayload.model_validate_json(cuerpo)
-    except ValidationError as exc:
-        log.warning("webhook_payload_invalido", errores=exc.errors()[:3])
-        return {"status": "ignored"}
-
-    mensajes = payload.mensajes_planos()
-    if not mensajes:
-        # Los webhooks de status (delivery/read) llegan acá; los ignoramos.
-        return {"status": "ok"}
-
-    # 3) Procesar cada mensaje en orden. Los errores individuales no rompen
-    #    el lote — los demás mensajes siguen procesándose.
-    for mensaje_meta in mensajes:
-        try:
-            await _procesar_mensaje(mensaje_meta, db)
-        except Exception as exc:
-            log.error(
-                "webhook_mensaje_falla",
-                wamid_prefix=mensaje_meta.id[:12] if mensaje_meta.id else None,
-                error_tipo=type(exc).__name__,
-                error_msg=str(exc),
+        # 1) Validar firma HMAC sobre el cuerpo CRUDO antes de cualquier parseo.
+        if not validar_firma_meta(cuerpo, x_hub_signature_256):
+            log.warning(
+                "webhook_firma_invalida",
+                firma_presente=bool(x_hub_signature_256),
             )
-        finally:
-            clear_contexto()
+            WEBHOOK_REQUESTS.labels(resultado="firma_invalida").inc()
+            raise HTTPException(status_code=401, detail="Firma inválida")
 
-    return {"status": "ok"}
+        # 2) Parsear payload. Si es malformado, ignoramos y respondemos 200
+        #    para que Meta no reintente.
+        try:
+            payload = MetaWebhookPayload.model_validate_json(cuerpo)
+        except ValidationError as exc:
+            log.warning("webhook_payload_invalido", errores=exc.errors()[:3])
+            WEBHOOK_REQUESTS.labels(resultado="payload_invalido").inc()
+            return {"status": "ignored"}
+
+        mensajes = payload.mensajes_planos()
+        if not mensajes:
+            # Los webhooks de status (delivery/read) llegan acá; los ignoramos.
+            WEBHOOK_REQUESTS.labels(resultado="ok").inc()
+            return {"status": "ok"}
+
+        # 3) Procesar cada mensaje en orden. Los errores individuales no rompen
+        #    el lote — los demás mensajes siguen procesándose.
+        for mensaje_meta in mensajes:
+            try:
+                await _procesar_mensaje(mensaje_meta, db)
+            except Exception as exc:
+                log.error(
+                    "webhook_mensaje_falla",
+                    wamid_prefix=mensaje_meta.id[:12] if mensaje_meta.id else None,
+                    error_tipo=type(exc).__name__,
+                    error_msg=str(exc),
+                )
+            finally:
+                clear_contexto()
+
+        WEBHOOK_REQUESTS.labels(resultado="ok").inc()
+        return {"status": "ok"}
 
 
 # =========================================================================
@@ -159,6 +170,7 @@ async def _procesar_mensaje(mensaje_meta: MetaMessage, db: AsyncSession) -> None
     # Idempotency: Meta puede reenviar el mismo wamid si no recibe nuestro 200
     # a tiempo. Descartamos duplicados antes de tocar el motor o la BD.
     if not await intentar_marcar_procesado(mensaje_meta.id):
+        MENSAJES_DUPLICADOS.inc()
         return
 
     # Convertir a `Mensaje` del motor. Si es un tipo no soportado o falla
@@ -172,6 +184,7 @@ async def _procesar_mensaje(mensaje_meta: MetaMessage, db: AsyncSession) -> None
 
         await _enviar_directo(telefono_e164, evidencia_rechazada_antivirus())
         log.warning("evidencia_antivirus_rechazada", remitente=telefono_e164[:6])
+        EVIDENCIAS_RECIBIDAS.labels(resultado="rechazada_antivirus").inc()
         return
     except _TipoNoSoportado as exc:
         from app.conversacion.mensajes import comando_no_reconocido

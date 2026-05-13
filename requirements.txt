@@ -48,6 +48,9 @@ python-multipart==0.0.20
 # ---- Templates (panel admin) ----------------------------------------------
 jinja2==3.1.5
 
+# ---- Observabilidad: métricas Prometheus ----------------------------------
+prometheus-client==0.21.1
+
 # ---- Logging estructurado -------------------------------------------------
 structlog==24.4.0
 

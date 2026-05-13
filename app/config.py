@@ -136,6 +136,16 @@ class Settings(BaseSettings):
     ADMIN_COOKIE_MAX_AGE: int = 8 * 60 * 60  # 8 horas
 
     # =========================================================================
+    # Audit trail firmado
+    # =========================================================================
+    # Secret HMAC para firmar el export de bitácora. Si está vacío, el
+    # endpoint /admin/audit-trail devuelve 503. DEBE SER DISTINTO al
+    # ADMIN_TOKEN — si un atacante obtiene este secret puede falsificar
+    # exports pero NO entrar al panel. Generar con:
+    #   python -c "import secrets; print(secrets.token_urlsafe(64))"
+    AUDIT_HMAC_SECRET: SecretStr = SecretStr("")
+
+    # =========================================================================
     # Observabilidad
     # =========================================================================
     LOG_FORMAT: Literal["json", "console"] = "json"

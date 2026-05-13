@@ -37,6 +37,7 @@ import dramatiq
 import httpx
 from dramatiq.brokers.redis import RedisBroker
 
+from app.metrics import CIERRES_ENVIADOS, SMTP_ENVIOS
 from app.utils.logger import obtener_logger
 
 log = obtener_logger(__name__)
@@ -112,8 +113,10 @@ def enviar_notificacion_alerta(codigo_publico: str, timestamp_iso: str) -> None:
 
     try:
         _enviar_smtp(mensaje, settings)
+        SMTP_ENVIOS.labels(resultado="ok").inc()
         log.info("smtp_envio_ok", codigo=codigo_publico)
     except Exception as exc:
+        SMTP_ENVIOS.labels(resultado="falla").inc()
         log.error(
             "smtp_envio_falla",
             codigo=codigo_publico,
@@ -210,12 +213,14 @@ def enviar_mensaje_cierre(destinatario: str, codigo_publico: str) -> None:
     texto = cierre_exitoso(codigo_publico)
     try:
         asyncio.run(_enviar_meta(destinatario, texto))
+        CIERRES_ENVIADOS.labels(resultado="ok").inc()
         log.info(
             "cierre_meta_envio_ok",
             destinatario_prefix=destinatario[:6],
             codigo=codigo_publico,
         )
     except Exception as exc:
+        CIERRES_ENVIADOS.labels(resultado="falla").inc()
         log.error(
             "cierre_meta_envio_falla",
             destinatario_prefix=destinatario[:6],

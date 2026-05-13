@@ -117,6 +117,13 @@ backup:  ## Hace backup de la BD a /tmp (DEST=ruta para cambiar destino)
 clean-tmp:  ## Borra archivos temporales de evidencias huérfanas (>30 min)
 	$(BIN)/python scripts/limpiar_temporales.py --verbose
 
+loadtest:  ## Test de carga: 100 webhooks + 100 consultas (concurrencia 20)
+	$(BIN)/python scripts/load_test.py \
+		--base-url $${BASE_URL:-http://127.0.0.1:8000} \
+		--webhooks $${WEBHOOKS:-100} \
+		--consultas $${CONSULTAS:-100} \
+		--concurrencia $${CONCURRENCIA:-20}
+
 clean:  ## Limpia caches y archivos temporales
 	find . -type d -name '__pycache__' -exec rm -rf {} + 2>/dev/null || true
 	find . -type d -name '.pytest_cache' -exec rm -rf {} + 2>/dev/null || true

@@ -47,6 +47,13 @@ from app.core.meta_client import (
     MetaAPITransitorio,
     get_meta_client,
 )
+from app.metrics import (
+    ALERTAS_CREADAS,
+    CIERRES_ENCOLADOS,
+    ESTADO_TRANSICIONES,
+    SESIONES_CANCELADAS,
+    VALIDACIONES_FALLIDAS,
+)
 from app.models.bitacora import EventoBitacora
 from app.services.alerta_service import registrar_denuncia
 from app.services.notificacion_service import enviar_mensaje_cierre
@@ -150,6 +157,20 @@ async def _ejecutar_accion(
             )
         )
         await db.flush()
+        # Actualizar métricas a partir del tipo de evento
+        if accion.evento == "ESTADO_AVANZADO" and accion.detalle:
+            ESTADO_TRANSICIONES.labels(
+                desde=accion.detalle.get("desde", "?"),
+                hasta=accion.detalle.get("hasta", "?"),
+            ).inc()
+        elif accion.evento == "VALIDACION_FALLIDA" and accion.detalle:
+            VALIDACIONES_FALLIDAS.labels(
+                estado=accion.detalle.get("estado", "?"),
+            ).inc()
+        elif accion.evento == "SESION_CANCELADA" and accion.detalle:
+            SESIONES_CANCELADAS.labels(
+                motivo=accion.detalle.get("motivo", "desconocido"),
+            ).inc()
         return None
 
     if isinstance(accion, AccionRegistrarDenuncia):
@@ -172,6 +193,8 @@ async def _ejecutar_registrar(
         datos=datos,
         evidencias_buffer=evidencias_buffer,
     )
+
+    ALERTAS_CREADAS.inc()
 
     return _CierrePendiente(
         destinatario=accion.destinatario,
@@ -200,6 +223,7 @@ async def _ejecutar_cierre(cierre: _CierrePendiente) -> None:
             destinatario=cierre.destinatario,
             codigo_publico=cierre.codigo_publico,
         )
+        CIERRES_ENCOLADOS.inc()
         log.info(
             "cierre_encolado",
             codigo=cierre.codigo_publico,

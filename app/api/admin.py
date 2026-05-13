@@ -33,8 +33,10 @@ import hashlib
 import hmac
 from pathlib import Path
 
-from fastapi import APIRouter, Cookie, Depends, Form, HTTPException, Request, status
-from fastapi.responses import HTMLResponse, RedirectResponse, Response
+from datetime import datetime
+
+from fastapi import APIRouter, Cookie, Depends, Form, HTTPException, Query, Request, status
+from fastapi.responses import HTMLResponse, RedirectResponse, Response, StreamingResponse
 from fastapi.templating import Jinja2Templates
 from sqlalchemy import func, or_, select
 from sqlalchemy.exc import IntegrityError
@@ -46,6 +48,7 @@ from app.core.security import get_crypto
 from app.database import get_db
 from app.models.alerta import Alerta, EstadoAlerta
 from app.models.bitacora import ActorBitacora, EventoBitacora, TipoEvento
+from app.services.audit_trail import generar_audit_trail
 from app.utils.logger import obtener_logger
 
 log = obtener_logger(__name__)
@@ -385,3 +388,75 @@ async def cambiar_estado(
         "_chip_estado.html",
         {"request": request, "estado": nuevo_estado},
     )
+
+
+# =========================================================================
+# Audit trail — export firmado y verificable de la bitácora completa
+# =========================================================================
+
+@router.get("/audit-trail", response_class=StreamingResponse)
+async def descargar_audit_trail(
+    desde: str | None = Query(None, description="ISO date opcional, ej. 2026-01-01"),
+    hasta: str | None = Query(None, description="ISO date opcional, exclusivo"),
+    db: AsyncSession = Depends(get_db),
+    sesion_id: str = Depends(autenticado),
+) -> Response:
+    """Exporta la bitácora completa en JSONL con hash encadenado + HMAC.
+
+    Cada línea contiene `__hash` (SHA-256 que enlaza con la fila anterior).
+    La última línea es un sello con HMAC del último hash usando
+    `AUDIT_HMAC_SECRET`. Un atacante con acceso de lectura a BD puede
+    modificar filas, pero la cadena de hashes lo detecta. Sin
+    `AUDIT_HMAC_SECRET` no se puede falsificar el sello final.
+
+    Para verificar un trail descargado:
+        python -c "
+        from app.services.audit_trail import verificar_audit_trail
+        with open('audit.jsonl') as f:
+            lineas = f.readlines()
+        ok, motivo = verificar_audit_trail(lineas, hmac_secret='...')
+        print(ok, motivo)
+        "
+    """
+    settings = get_settings()
+    secret = settings.AUDIT_HMAC_SECRET.get_secret_value()
+    if not secret:
+        raise HTTPException(
+            status_code=503,
+            detail="Audit trail deshabilitado — configurar AUDIT_HMAC_SECRET en .env",
+        )
+
+    desde_dt = _parse_iso(desde)
+    hasta_dt = _parse_iso(hasta)
+
+    log.info(
+        "audit_trail_descargado",
+        sesion=sesion_id,
+        desde=desde,
+        hasta=hasta,
+    )
+
+    timestamp = datetime.utcnow().strftime("%Y%m%d_%H%M%S")
+    headers = {
+        "Content-Disposition": f'attachment; filename="audit-trail-{timestamp}.jsonl"',
+        "X-Audit-Trail-Version": "1",
+    }
+
+    return StreamingResponse(
+        generar_audit_trail(db, desde=desde_dt, hasta=hasta_dt, hmac_secret=secret),
+        media_type="application/x-ndjson",
+        headers=headers,
+    )
+
+
+def _parse_iso(valor: str | None) -> datetime | None:
+    """Parsea una fecha ISO o devuelve None. Lanza 400 si formato inválido."""
+    if not valor:
+        return None
+    try:
+        return datetime.fromisoformat(valor)
+    except ValueError as exc:
+        raise HTTPException(
+            status_code=400,
+            detail=f"Fecha ISO inválida: {valor!r}. Formato esperado: YYYY-MM-DD",
+        ) from exc

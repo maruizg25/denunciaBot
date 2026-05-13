@@ -354,6 +354,190 @@ make clean-tmp
 
 ---
 
+## 11. Métricas Prometheus
+
+DenunciaBot expone métricas en formato OpenMetrics en `/metrics` (sin
+autenticación; restringir por IP en el reverse proxy si fuera necesario).
+
+**Métricas más útiles para alertas/dashboards**:
+
+| Métrica | Tipo | Uso |
+|---------|------|-----|
+| `denunciabot_webhook_requests_total{resultado}` | counter | Alertar si `firma_invalida` crece (posible ataque) |
+| `denunciabot_webhook_duration_seconds` | histogram | p95 > 2s → investigar latencia |
+| `denunciabot_alertas_creadas_total` | counter | Tasa de denuncias por hora |
+| `denunciabot_alertas_por_estado{estado}` | gauge | Distribución actual de estados |
+| `denunciabot_evidencias_recibidas_total{resultado}` | counter | Tasa de rechazos por antivirus |
+| `denunciabot_meta_api_errores_total` | counter | Salud de la integración con Meta |
+| `denunciabot_smtp_envios_total{resultado}` | counter | Notificaciones que fallan |
+| `denunciabot_cierres_enviados_total{resultado}` | counter | Cuántos ciudadanos NO reciben código |
+| `denunciabot_mensajes_duplicados_total` | counter | Si crece mucho, Meta tiene problemas de delivery |
+
+**Configurar scraping en Prometheus**:
+
+```yaml
+scrape_configs:
+  - job_name: 'denunciabot'
+    scrape_interval: 30s
+    static_configs:
+      - targets: ['denunciabot.sercop.gob.ec:443']
+    scheme: https
+    metrics_path: /metrics
+```
+
+**Alertas recomendadas** (en Prometheus / Grafana):
+
+```yaml
+groups:
+- name: denunciabot
+  rules:
+  - alert: WebhookFirmaInvalida
+    expr: rate(denunciabot_webhook_requests_total{resultado="firma_invalida"}[5m]) > 0.1
+    for: 5m
+    annotations:
+      summary: "Posible ataque al webhook de DenunciaBot"
+
+  - alert: SMTPFallandoSostenido
+    expr: rate(denunciabot_smtp_envios_total{resultado="falla"}[15m]) > 0
+    for: 15m
+    annotations:
+      summary: "SMTP del bot fallando por más de 15 min"
+
+  - alert: WebhookLatenciaAlta
+    expr: histogram_quantile(0.95, rate(denunciabot_webhook_duration_seconds_bucket[5m])) > 2
+    for: 10m
+    annotations:
+      summary: "p95 del webhook > 2s — Meta podría reintentar"
+```
+
+---
+
+## 12. Integración con SIEM institucional
+
+Los logs estructurados de DenunciaBot (vía `structlog`) van a `journald`.
+Para enviarlos al SIEM institucional (Wazuh / Splunk / ELK) hay dos
+caminos comunes.
+
+**Opción A — syslog-ng (recomendada para Wazuh/Graylog)**:
+
+```bash
+sudo dnf install -y syslog-ng
+
+# /etc/syslog-ng/conf.d/denunciabot.conf
+source s_journald { systemd-journal(); };
+filter f_denunciabot { match("denunciabot" value("UNIT")); };
+destination d_siem { tcp("siem.sercop.gob.ec" port(514)); };
+log { source(s_journald); filter(f_denunciabot); destination(d_siem); };
+
+sudo systemctl restart syslog-ng
+```
+
+**Opción B — Filebeat (recomendada para ELK)**:
+
+```yaml
+# /etc/filebeat/filebeat.yml
+filebeat.inputs:
+- type: journald
+  id: denunciabot
+  include_matches:
+    - "_SYSTEMD_UNIT=denunciabot.service"
+    - "_SYSTEMD_UNIT=denunciabot-worker.service"
+
+output.elasticsearch:
+  hosts: ["siem.sercop.gob.ec:9200"]
+  index: "denunciabot-%{+yyyy.MM.dd}"
+```
+
+**Eventos críticos a alertar en el SIEM**:
+
+| Evento del log | Severidad | Razón |
+|----------------|-----------|-------|
+| `webhook_firma_invalida` | ALTA | Posible spoofing del webhook |
+| `admin_login_fallido` | MEDIA (3 en 5 min: ALTA) | Posible brute-force al panel |
+| `evidencia_antivirus_rechazada` | INFORMATIVA | Tracking de archivos maliciosos |
+| `clamav_archivo_infectado` | INFORMATIVA → MEDIA si recurrente | Tracking de amenazas |
+| `excepcion_no_capturada` | ALTA | Bug que escapó al manejo de errores |
+| `cierre_meta_envio_falla` | MEDIA | Ciudadanos sin código si persiste |
+| `sesion_redis_caido_al_leer` | ALTA | Redis no disponible — afecta UX |
+| `smtp_envio_falla` | MEDIA | Buzón institucional sin nuevas notificaciones |
+
+**Consulta de ejemplo en Splunk** para detectar intentos de spoofing:
+
+```
+index=denunciabot event="webhook_firma_invalida"
+| stats count by host, src_ip
+| where count > 10
+```
+
+**Filtro en Wazuh** (descriptor de regla):
+
+```xml
+<rule id="100501" level="10">
+  <decoded_as>json</decoded_as>
+  <field name="event">webhook_firma_invalida</field>
+  <description>DenunciaBot: posible spoofing del webhook de Meta</description>
+  <group>denunciabot,intrusion_attempt</group>
+</rule>
+```
+
+---
+
+## 13. Audit trail descargable
+
+El bot expone `/admin/audit-trail` (requiere login admin Y `AUDIT_HMAC_SECRET`
+configurado). Devuelve la bitácora completa en JSONL con hash encadenado
+y sello HMAC final.
+
+**Generar y verificar un audit trail**:
+
+```bash
+# Descargar (autenticado por cookie admin)
+curl -b denunciabot_admin=... \
+     "https://denunciabot.sercop.gob.ec/admin/audit-trail?desde=2026-01-01" \
+     -o audit-2026.jsonl
+
+# Verificar offline (requiere el AUDIT_HMAC_SECRET)
+python -c "
+import json
+from app.services.audit_trail import verificar_audit_trail
+with open('audit-2026.jsonl') as f:
+    lineas = f.readlines()
+ok, motivo = verificar_audit_trail(lineas, hmac_secret='EL_SECRET_DEL_ENV')
+print(f'Verificación: {ok} — {motivo}')
+"
+```
+
+**Propiedades del trail**:
+- Cada fila incluye un `__hash` SHA-256 que enlaza con la anterior.
+- Cualquier modificación retroactiva (UPDATE de una fila vieja) rompe
+  la cadena de todas las filas posteriores.
+- El sello final es HMAC del último hash usando `AUDIT_HMAC_SECRET`.
+- Sin conocer el secret, un atacante NO puede generar un trail
+  "consistente con su versión modificada de la BD".
+
+**Limitación honesta**: si un atacante modifica la BD ANTES de generar el
+trail, el trail saldrá consistente con la BD alterada. Mitigación:
+generar trails periódicos (ej. semanales) y comparar los hashes entre
+exports — un trail nuevo debe contener TODAS las filas del anterior con
+los mismos hashes en las posiciones hasta el punto común.
+
+---
+
+## 14. Tests de carga (`load_test.py`)
+
+Para validar capacidad antes de producción:
+
+```bash
+# Stack local levantado (make up + make run)
+make loadtest                                # 100 webhooks + 100 consultas
+make loadtest WEBHOOKS=1000 CONCURRENCIA=50  # más agresivo
+```
+
+El script reporta latencias p50/p95/p99, throughput y errores. Útil
+para detectar deadlocks, leaks de memoria y saturación del pool de BD.
+
+---
+
 ## Escalación
 
 Si nada de lo anterior resuelve el problema:
