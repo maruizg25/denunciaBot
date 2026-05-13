@@ -63,6 +63,8 @@ def _env_test() -> Iterator[None]:
         "SMTP_TO": "destino@test.local",
         "EVIDENCIAS_DIR": "/tmp/denunciabot_test_evidencias",
         "CLAMAV_ENABLED": "false",
+        # Rate limit absurdamente alto para tests — no debe disparar.
+        "RATE_LIMIT_WEBHOOK": "10000/minute",
     }
     anteriores: dict[str, str | None] = {k: os.environ.get(k) for k in valores}
     os.environ.update(valores)

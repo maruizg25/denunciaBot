@@ -1,0 +1,40 @@
+# =============================================================================
+# DenunciaBot — Cleanup de evidencias temporales huérfanas (oneshot)
+# -----------------------------------------------------------------------------
+# Disparado por `denunciabot-cleanup.timer` cada 30 minutos.
+# Borra archivos en EVIDENCIAS_DIR/tmp/ con mtime > 30 min.
+#
+# Instalación:
+#   sudo cp denunciabot-cleanup.service denunciabot-cleanup.timer /etc/systemd/system/
+#   sudo systemctl daemon-reload
+#   sudo systemctl enable --now denunciabot-cleanup.timer
+#
+# Verificar próximas ejecuciones:
+#   systemctl list-timers denunciabot-cleanup.timer
+# =============================================================================
+
+[Unit]
+Description=DenunciaBot — Limpieza de archivos temporales huérfanos
+Documentation=https://github.com/maruizg25/denunciaBot
+After=denunciabot.service
+
+[Service]
+Type=oneshot
+User=denunciabot
+Group=denunciabot
+
+WorkingDirectory=/opt/denunciabot
+EnvironmentFile=/opt/denunciabot/.env
+
+ExecStart=/opt/denunciabot/.venv/bin/python /opt/denunciabot/scripts/limpiar_temporales.py --minutos 30
+
+# Hardening: idéntico al servicio principal
+NoNewPrivileges=yes
+PrivateTmp=yes
+ProtectSystem=strict
+ProtectHome=yes
+ReadWritePaths=/opt/denunciabot /var/lib/denunciabot
+
+StandardOutput=journal
+StandardError=journal
+SyslogIdentifier=denunciabot-cleanup

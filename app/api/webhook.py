@@ -27,6 +27,8 @@ from pathlib import Path
 from fastapi import APIRouter, Depends, Header, HTTPException, Query, Request
 from fastapi.responses import PlainTextResponse
 from pydantic import ValidationError
+from slowapi import Limiter
+from slowapi.util import get_remote_address
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.config import get_settings
@@ -44,6 +46,10 @@ from app.utils.logger import bind_contexto, clear_contexto, obtener_logger
 log = obtener_logger(__name__)
 
 router = APIRouter(tags=["webhook"])
+
+# Limiter local del router. Comparte el state.limiter de la app a través
+# del Request. Permite que cada endpoint declare su propio rate limit.
+_limiter = Limiter(key_func=get_remote_address)
 
 
 # =========================================================================
@@ -77,12 +83,17 @@ async def verificar_webhook(
 # =========================================================================
 
 @router.post("/webhook")
+@_limiter.limit(lambda: get_settings().RATE_LIMIT_WEBHOOK)
 async def recibir_webhook(
     request: Request,
     db: AsyncSession = Depends(get_db),
     x_hub_signature_256: str | None = Header(default=None),
 ) -> dict[str, str]:
-    """Recibe un evento de WhatsApp, valida firma, despacha al motor."""
+    """Recibe un evento de WhatsApp, valida firma, despacha al motor.
+
+    Rate limit configurable vía `RATE_LIMIT_WEBHOOK` en .env (default 120/min
+    por IP). Si se excede, slowapi devuelve 429 sin invocar este handler.
+    """
     cuerpo = await request.body()
 
     # 1) Validar firma HMAC sobre el cuerpo CRUDO antes de cualquier parseo.

@@ -250,12 +250,31 @@ python scripts/export_alertas.py --salida /tmp/post-rotacion.csv
 
 ## 8. Backup y restauración de PostgreSQL
 
-**Backup automático recomendado (cron)**
+**Backup automático (systemd timer — recomendado)**
 
-```cron
-# /etc/cron.d/denunciabot-backup
-0 2 * * *  postgres  pg_dump -F c -f /var/backups/denunciabot/$(date +\%Y\%m\%d).dump denunciabot
-0 3 * * *  postgres  find /var/backups/denunciabot -name '*.dump' -mtime +30 -delete
+Instalación una sola vez:
+
+```bash
+sudo mkdir -p /var/backups/denunciabot
+sudo chown denunciabot:denunciabot /var/backups/denunciabot
+sudo chmod 700 /var/backups/denunciabot
+
+sudo cp denunciabot-backup.service denunciabot-backup.timer /etc/systemd/system/
+sudo systemctl daemon-reload
+sudo systemctl enable --now denunciabot-backup.timer
+
+# Próxima ejecución programada
+systemctl list-timers denunciabot-backup.timer
+```
+
+Corre diario a las 02:00 UTC (~21:00 hora Ecuador). Permite 30 días de retención.
+
+**Backup manual / extraordinario**
+
+```bash
+make backup              # → /tmp/denunciabot-backups
+# o
+python scripts/backup_db.py --destino /var/backups/denunciabot
 ```
 
 **Restauración**
@@ -304,20 +323,33 @@ Si el servicio no arranca:
 
 Los archivos descargados de Meta se guardan en `<EVIDENCIAS_DIR>/tmp/` mientras espera la confirmación del ciudadano. Si el bot crashea o el ciudadano cancela, esos archivos pueden quedar huérfanos.
 
-**Cron de limpieza**
+**Automatización (systemd timer — recomendado)**
 
-```cron
-# /etc/cron.d/denunciabot-cleanup
-*/30 * * * *  denunciabot  find /var/lib/denunciabot/evidencias/tmp -type f -mmin +30 -delete
+```bash
+# Instalación de una vez:
+sudo cp denunciabot-cleanup.service denunciabot-cleanup.timer /etc/systemd/system/
+sudo systemctl daemon-reload
+sudo systemctl enable --now denunciabot-cleanup.timer
+
+# Verificar próximas ejecuciones
+systemctl list-timers denunciabot-cleanup.timer
+
+# Ver el resultado de la última corrida
+sudo journalctl -u denunciabot-cleanup.service -n 50
 ```
 
-Borra cualquier archivo en `tmp/` con más de 30 minutos de antigüedad. Como las sesiones expiran a los 5 min, 30 min es un margen seguro.
+El timer dispara cada 30 minutos. Borra archivos en `tmp/` con `mtime > 30 min`.
 
 **Limpieza manual**
 
 ```bash
-find /var/lib/denunciabot/evidencias/tmp -type f -mmin +60 -delete
-# Verifica con: find /var/lib/denunciabot/evidencias/tmp -type f -mmin +60 | wc -l
+# Vista previa (no borra)
+python scripts/limpiar_temporales.py --dry-run --verbose
+
+# Borrar
+python scripts/limpiar_temporales.py
+# o vía Make:
+make clean-tmp
 ```
 
 ---

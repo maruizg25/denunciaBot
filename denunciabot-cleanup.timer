@@ -1,0 +1,29 @@
+# =============================================================================
+# DenunciaBot — Timer para el cleanup de temporales
+# -----------------------------------------------------------------------------
+# Dispara `denunciabot-cleanup.service` cada 30 minutos.
+# La primera ejecución es 5 minutos después del arranque del sistema, para
+# no competir con el arranque de denunciabot.service.
+# =============================================================================
+
+[Unit]
+Description=DenunciaBot — Disparador de cleanup cada 30 minutos
+Requires=denunciabot-cleanup.service
+
+[Timer]
+# OnBootSec: cuándo correr por primera vez tras el boot
+OnBootSec=5min
+
+# OnUnitActiveSec: intervalo entre ejecuciones consecutivas
+OnUnitActiveSec=30min
+
+# Permite ejecutar al arranque si el timer estaba activo cuando se apagó
+Persistent=true
+
+# Aleatoriza un poco para evitar tormentas si hay varios hosts
+RandomizedDelaySec=2min
+
+Unit=denunciabot-cleanup.service
+
+[Install]
+WantedBy=timers.target

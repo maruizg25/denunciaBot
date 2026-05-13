@@ -1,0 +1,22 @@
+# =============================================================================
+# DenunciaBot — Timer para backup diario
+# -----------------------------------------------------------------------------
+# Dispara `denunciabot-backup.service` todos los días a las 02:00 UTC.
+# Persistent=true asegura que si el server estuvo apagado a esa hora,
+# el backup se ejecuta al volver a arrancar.
+# =============================================================================
+
+[Unit]
+Description=DenunciaBot — Disparador de backup diario
+Requires=denunciabot-backup.service
+
+[Timer]
+# 02:00 UTC = ~21:00 EC (Ecuador es UTC-5). Hora valle.
+OnCalendar=*-*-* 02:00:00
+Persistent=true
+RandomizedDelaySec=10min
+
+Unit=denunciabot-backup.service
+
+[Install]
+WantedBy=timers.target

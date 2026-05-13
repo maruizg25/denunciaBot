@@ -1,0 +1,52 @@
+# =============================================================================
+# DenunciaBot — Backup de PostgreSQL (oneshot)
+# -----------------------------------------------------------------------------
+# Disparado por `denunciabot-backup.timer` diariamente.
+# Hace pg_dump custom-format, lo guarda con permisos 0o600 y aplica
+# retención de 30 días (configurable).
+#
+# Instalación:
+#   sudo cp denunciabot-backup.service denunciabot-backup.timer /etc/systemd/system/
+#   sudo mkdir -p /var/backups/denunciabot
+#   sudo chown denunciabot:denunciabot /var/backups/denunciabot
+#   sudo chmod 700 /var/backups/denunciabot
+#   sudo systemctl daemon-reload
+#   sudo systemctl enable --now denunciabot-backup.timer
+#
+# Restauración: ver RUNBOOK.md sección 8.
+# =============================================================================
+
+[Unit]
+Description=DenunciaBot — Backup diario de PostgreSQL
+Documentation=https://github.com/maruizg25/denunciaBot
+Requires=postgresql.service
+After=postgresql.service
+
+[Service]
+Type=oneshot
+User=denunciabot
+Group=denunciabot
+
+WorkingDirectory=/opt/denunciabot
+EnvironmentFile=/opt/denunciabot/.env
+
+ExecStart=/opt/denunciabot/.venv/bin/python /opt/denunciabot/scripts/backup_db.py \
+    --destino /var/backups/denunciabot \
+    --retencion-dias 30
+
+# Necesita escribir al directorio de backups
+ReadWritePaths=/var/backups/denunciabot
+
+# Hardening
+NoNewPrivileges=yes
+PrivateTmp=yes
+ProtectSystem=strict
+ProtectHome=yes
+ProtectKernelTunables=yes
+
+# Timeout generoso para BD grandes (1h máx)
+TimeoutStartSec=3700
+
+StandardOutput=journal
+StandardError=journal
+SyslogIdentifier=denunciabot-backup

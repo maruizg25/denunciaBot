@@ -111,6 +111,12 @@ typecheck:  ## Verifica tipos con mypy
 export:  ## Exporta alertas a CSV (FILE=ruta.csv para personalizar)
 	$(BIN)/python scripts/export_alertas.py --salida $${FILE:-alertas.csv}
 
+backup:  ## Hace backup de la BD a /tmp (DEST=ruta para cambiar destino)
+	$(BIN)/python scripts/backup_db.py --destino $${DEST:-/tmp/denunciabot-backups}
+
+clean-tmp:  ## Borra archivos temporales de evidencias huérfanas (>30 min)
+	$(BIN)/python scripts/limpiar_temporales.py --verbose
+
 clean:  ## Limpia caches y archivos temporales
 	find . -type d -name '__pycache__' -exec rm -rf {} + 2>/dev/null || true
 	find . -type d -name '.pytest_cache' -exec rm -rf {} + 2>/dev/null || true
