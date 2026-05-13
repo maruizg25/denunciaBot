@@ -36,8 +36,9 @@ from app.core.security import correlacion_log, get_crypto, validar_firma_meta
 from app.database import get_db
 from app.schemas.meta import MetaMessage, MetaWebhookPayload
 from app.services.evidencia_service import ClamAVError, escanear_con_clamav
+from app.services.idempotency_service import intentar_marcar_procesado
 from app.services.orquestador import ejecutar
-from app.services.sesion_service import obtener_sesion
+from app.services.sesion_service import RedisError, obtener_sesion
 from app.utils.logger import bind_contexto, clear_contexto, obtener_logger
 
 log = obtener_logger(__name__)
@@ -144,6 +145,11 @@ async def _procesar_mensaje(mensaje_meta: MetaMessage, db: AsyncSession) -> None
         ciudadano_corr=correlacion_log(telefono_hash),
     )
 
+    # Idempotency: Meta puede reenviar el mismo wamid si no recibe nuestro 200
+    # a tiempo. Descartamos duplicados antes de tocar el motor o la BD.
+    if not await intentar_marcar_procesado(mensaje_meta.id):
+        return
+
     # Convertir a `Mensaje` del motor. Si es un tipo no soportado o falla
     # la descarga de media, lo manejamos como rechazo amigable.
     try:
@@ -168,8 +174,17 @@ async def _procesar_mensaje(mensaje_meta: MetaMessage, db: AsyncSession) -> None
         log.error("descarga_media_falla", error=str(exc))
         return
 
-    # Leer sesión actual desde Redis
-    sesion = await obtener_sesion(telefono_hash)
+    # Leer sesión actual desde Redis. Si Redis está caído, avisamos al
+    # ciudadano con un mensaje degradado y abortamos sin tocar el motor
+    # ni la BD (sin sesión no podemos saber en qué paso del flujo está).
+    try:
+        sesion = await obtener_sesion(telefono_hash)
+    except RedisError:
+        from app.conversacion.mensajes import servicio_no_disponible
+
+        await _enviar_directo(telefono_e164, servicio_no_disponible())
+        log.error("webhook_redis_caido", remitente_prefix=telefono_e164[:6])
+        return
 
     # Ejecutar motor
     resultado = procesar_mensaje(

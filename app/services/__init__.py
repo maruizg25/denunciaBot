@@ -20,6 +20,10 @@ from app.services.evidencia_service import (
     escanear_con_clamav,
     persistir_evidencia,
 )
+from app.services.idempotency_service import (
+    intentar_marcar_procesado,
+    olvidar_wamid,
+)
 from app.services.notificacion_service import (
     configurar_broker_dramatiq,
     enviar_notificacion_alerta,
@@ -56,4 +60,7 @@ __all__ = [
     "configurar_broker_dramatiq",
     # Orquestador
     "ejecutar_acciones",
+    # Idempotency
+    "intentar_marcar_procesado",
+    "olvidar_wamid",
 ]

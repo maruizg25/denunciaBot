@@ -81,14 +81,20 @@ worker:  ## Levanta el worker Dramatiq (en otra terminal)
 
 # ---- Tests y calidad --------------------------------------------------------
 
-test:  ## Corre la suite de tests
+test:  ## Corre los tests unitarios (excluye integración)
 	$(BIN)/pytest
 
-test-cov:  ## Tests con reporte de cobertura
+test-integration:  ## Tests de integración (requiere `make up` + `make init-db`)
+	$(BIN)/pytest -m integration --override-ini="addopts=--strict-markers --tb=short -ra"
+
+test-all:  ## Todos los tests (unitarios + integración)
+	$(BIN)/pytest --override-ini="addopts=--strict-markers --tb=short -ra"
+
+test-cov:  ## Tests unitarios con reporte de cobertura
 	$(BIN)/pytest --cov=app --cov-report=term-missing --cov-report=html
 	@echo "Reporte HTML: htmlcov/index.html"
 
-test-fast:  ## Tests excluyendo los marcados como slow/integration
+test-fast:  ## Tests excluyendo los marcados como slow o integration
 	$(BIN)/pytest -m "not slow and not integration"
 
 lint:  ## Ejecuta ruff (linter)

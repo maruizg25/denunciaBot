@@ -402,6 +402,17 @@ def error_interno() -> str:
     )
 
 
+def servicio_no_disponible() -> str:
+    """Mensaje cuando una dependencia crítica (Redis) no responde."""
+    return (
+        "Estamos teniendo una dificultad técnica momentánea. "
+        "Por favor intente nuevamente en unos minutos.\n"
+        "\n"
+        "Si su denuncia es urgente, le sugerimos comunicarse adicionalmente "
+        "con las autoridades competentes por los canales oficiales."
+    )
+
+
 def fuera_de_horario() -> str:
     """Reservado para uso futuro si se quiere restringir horario de atención."""
     return (

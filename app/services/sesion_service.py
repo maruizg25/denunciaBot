@@ -21,12 +21,27 @@ import json
 from typing import Any
 
 from redis.asyncio import Redis
+from redis.exceptions import RedisError
 
 from app.conversacion.motor import Sesion
 from app.models.sesion import EstadoSesion
 from app.utils.logger import obtener_logger
 
 log = obtener_logger(__name__)
+
+
+# Re-exportamos RedisError para que los callers no tengan que importar
+# directamente de la librería `redis` — encapsulamos la dependencia.
+__all__ = (
+    "RedisError",
+    "cerrar_redis",
+    "eliminar_sesion",
+    "get_redis",
+    "guardar_sesion",
+    "obtener_sesion",
+    "renovar_ttl",
+    "ttl_restante",
+)
 
 
 # =========================================================================
@@ -96,9 +111,21 @@ def _clave(telefono_hash: str) -> str:
 # =========================================================================
 
 async def obtener_sesion(telefono_hash: str) -> Sesion | None:
-    """Lee la sesión actual del ciudadano, o `None` si no existe / expiró."""
+    """Lee la sesión actual del ciudadano, o `None` si no existe / expiró.
+
+    Propaga `RedisError` si Redis está caído. El caller (webhook) debe
+    capturarla y responder al ciudadano con un mensaje degradado.
+    """
     redis = get_redis()
-    raw = await redis.get(_clave(telefono_hash))
+    try:
+        raw = await redis.get(_clave(telefono_hash))
+    except RedisError:
+        log.error(
+            "sesion_redis_caido_al_leer",
+            telefono_hash_prefix=telefono_hash[:8],
+        )
+        raise
+
     if raw is None:
         return None
     try:
@@ -110,7 +137,11 @@ async def obtener_sesion(telefono_hash: str) -> Sesion | None:
             telefono_hash_prefix=telefono_hash[:8],
             error=type(exc).__name__,
         )
-        await redis.delete(_clave(telefono_hash))
+        try:
+            await redis.delete(_clave(telefono_hash))
+        except RedisError:
+            # Si no podemos limpiar la basura, no es crítico. Seguimos.
+            pass
         return None
 
 
