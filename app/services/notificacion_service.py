@@ -1,29 +1,40 @@
 """
-Servicio de notificaciones SMTP — corre en worker Dramatiq.
+Servicio de notificaciones — corre en worker Dramatiq.
+
+Define dos actors:
+  - `enviar_notificacion_alerta(codigo, timestamp)`: envía un email al
+    buzón institucional informando de una nueva denuncia.
+  - `enviar_mensaje_cierre(destinatario, codigo)`: envía al ciudadano el
+    mensaje de cierre con su código de seguimiento via Meta API.
+
+Ambos viven aquí (en lugar de en archivos separados) porque comparten
+el mismo broker y se importan juntos por el worker systemd.
 
 Diseño:
-  - Define el actor `enviar_notificacion_alerta`. Importar este módulo lo
-    registra automáticamente en el broker actual de Dramatiq.
   - `configurar_broker_dramatiq()` debe llamarse UNA vez al arranque del
-    proceso (api o worker) para conectar el broker Redis real. Hasta que
-    se llame, Dramatiq usa el broker stub por defecto — útil para tests.
-  - El actor es síncrono (Dramatiq lo prefiere así). Usamos `smtplib` de
-    la stdlib y abrimos/cerramos la conexión SMTP por mensaje. Para
-    volúmenes mayores se podría reusar conexión, pero el bot recibe
-    pocas denuncias por día — no amerita complejidad.
+    proceso (api y worker). Hasta entonces, Dramatiq usa el broker stub.
+  - Los actors son síncronos. Para Meta usamos asyncio.run + httpx
+    porque la lib es async. Cada llamada crea su propio cliente (evita
+    problemas de event loops entre procesos worker).
+  - Reintentos automáticos con backoff exponencial.
 
-Reintentos:
-  - `max_retries=3`, backoff de 5s a 5min (configurable en el decorador).
-  - Si todos fallan, Dramatiq mueve el mensaje a la dead-letter queue.
+Política de reintentos:
+  - SMTP: max_retries=3, 5s a 5min.
+  - Cierre Meta: max_retries=5, 10s a 10min (más generoso porque
+    queremos hacer todo lo posible para que el ciudadano reciba su código).
+  - Después de los reintentos, los mensajes muertos van a la DLQ
+    (cola `<nombre>.DQ`) — el operador puede re-encolarlos manualmente.
 """
 
 from __future__ import annotations
 
+import asyncio
 import smtplib
 from email.message import EmailMessage
 from email.utils import formataddr
 
 import dramatiq
+import httpx
 from dramatiq.brokers.redis import RedisBroker
 
 from app.utils.logger import obtener_logger
@@ -168,3 +179,85 @@ def _enviar_smtp(mensaje: EmailMessage, settings) -> None:
                     settings.SMTP_PASSWORD.get_secret_value(),
                 )
             srv.send_message(mensaje)
+
+
+# =========================================================================
+# Actor: envío del mensaje de cierre al ciudadano vía Meta API
+# =========================================================================
+
+@dramatiq.actor(
+    max_retries=5,
+    min_backoff=10_000,         # 10 segundos
+    max_backoff=10 * 60_000,    # 10 minutos
+    queue_name="cierres",
+)
+def enviar_mensaje_cierre(destinatario: str, codigo_publico: str) -> None:
+    """Envía al ciudadano el mensaje de cierre con su código de seguimiento.
+
+    Ejecutado después de un commit exitoso de `registrar_denuncia`. Si la
+    primera llamada a Meta falla (5xx, timeout, rate limit), Dramatiq
+    reintenta con backoff exponencial. Después de 5 intentos fallidos,
+    el mensaje va a la DLQ (`cierres.DQ`) y el operador puede re-encolarlo
+    cuando Meta esté operativo (ver RUNBOOK §4).
+
+    Args:
+        destinatario: número del ciudadano en formato E.164 sin '+'.
+        codigo_publico: código ALR-YYYY-XXXXXX recién generado.
+    """
+    # Import tardío para evitar ciclo con app.conversacion en el worker
+    from app.conversacion.mensajes import cierre_exitoso
+
+    texto = cierre_exitoso(codigo_publico)
+    try:
+        asyncio.run(_enviar_meta(destinatario, texto))
+        log.info(
+            "cierre_meta_envio_ok",
+            destinatario_prefix=destinatario[:6],
+            codigo=codigo_publico,
+        )
+    except Exception as exc:
+        log.error(
+            "cierre_meta_envio_falla",
+            destinatario_prefix=destinatario[:6],
+            codigo=codigo_publico,
+            error_tipo=type(exc).__name__,
+            error_msg=str(exc),
+        )
+        raise  # Dramatiq reintentará
+
+
+async def _enviar_meta(destinatario: str, texto: str) -> None:
+    """Llamada async a Meta API con un cliente httpx efímero.
+
+    No reusamos el singleton de `meta_client` porque el actor corre en un
+    proceso distinto al del API y vivir con un cliente reusado en otro
+    event loop genera problemas. La sobrecarga de un cliente por mensaje
+    es trivial para el volumen del bot.
+    """
+    from app.config import get_settings
+
+    settings = get_settings()
+    phone_id = settings.META_PHONE_NUMBER_ID.get_secret_value()
+    token = settings.META_ACCESS_TOKEN.get_secret_value()
+
+    async with httpx.AsyncClient(
+        base_url=settings.meta_url_base,
+        timeout=10.0,
+        headers={
+            "Authorization": f"Bearer {token}",
+            "Content-Type": "application/json",
+        },
+    ) as client:
+        respuesta = await client.post(
+            f"/{phone_id}/messages",
+            json={
+                "messaging_product": "whatsapp",
+                "recipient_type": "individual",
+                "to": destinatario,
+                "type": "text",
+                "text": {"preview_url": False, "body": texto},
+            },
+        )
+        # 2xx → OK. 4xx → permanente (no reintentar por sí solo, pero
+        # Dramatiq reintenta de todos modos). 5xx → transitorio.
+        respuesta.raise_for_status()

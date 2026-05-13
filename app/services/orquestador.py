@@ -32,7 +32,6 @@ from dataclasses import dataclass
 
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.conversacion import mensajes
 from app.conversacion.motor import (
     AccionEliminarSesion,
     AccionEnviarBotones,
@@ -50,6 +49,7 @@ from app.core.meta_client import (
 )
 from app.models.bitacora import EventoBitacora
 from app.services.alerta_service import registrar_denuncia
+from app.services.notificacion_service import enviar_mensaje_cierre
 from app.services.sesion_service import (
     eliminar_sesion,
     guardar_sesion,
@@ -185,23 +185,47 @@ async def _ejecutar_registrar(
 # =========================================================================
 
 async def _ejecutar_cierre(cierre: _CierrePendiente) -> None:
-    """Tras commit exitoso: enviar cierre al ciudadano y borrar la sesión.
+    """Tras commit exitoso: encolar el envío del cierre y borrar la sesión.
 
-    Cada paso se intenta independientemente. Si el envío de cierre falla,
-    la denuncia YA está persistida; el caso se loguea para reconciliación.
+    Encolamos el mensaje en Dramatiq en lugar de llamar a Meta inline:
+      - Si Meta falla momentáneamente, el actor reintenta hasta 5 veces
+        con backoff exponencial. El ciudadano recibe su código aunque
+        haya un blip de Meta.
+      - El response al webhook es más rápido (no espera a Meta).
+      - Si todos los reintentos fallan, el mensaje queda en la DLQ
+        `cierres.DQ` para inspección/re-procesamiento manual.
     """
     try:
-        await _enviar_texto(
-            cierre.destinatario,
-            mensajes.cierre_exitoso(cierre.codigo_publico),
+        enviar_mensaje_cierre.send(
+            destinatario=cierre.destinatario,
+            codigo_publico=cierre.codigo_publico,
         )
-    except (MetaAPITransitorio, MetaAPIPermanente) as exc:
-        log.error(
-            "cierre_no_enviado",
+        log.info(
+            "cierre_encolado",
             codigo=cierre.codigo_publico,
-            error_tipo=type(exc).__name__,
-            error_msg=str(exc),
+            destinatario_prefix=cierre.destinatario[:6],
         )
+    except Exception as exc:
+        # Si la cola está caída (Redis Dramatiq inalcanzable), intentamos
+        # envío sincrónico como fallback. La denuncia ya está persistida.
+        log.error(
+            "cierre_no_encolado_fallback_sincrono",
+            codigo=cierre.codigo_publico,
+            error=str(exc),
+        )
+        try:
+            from app.conversacion.mensajes import cierre_exitoso
+
+            await _enviar_texto(
+                cierre.destinatario,
+                cierre_exitoso(cierre.codigo_publico),
+            )
+        except (MetaAPITransitorio, MetaAPIPermanente) as exc_meta:
+            log.error(
+                "cierre_fallback_tambien_fallo",
+                codigo=cierre.codigo_publico,
+                error=str(exc_meta),
+            )
 
     try:
         await eliminar_sesion(cierre.telefono_hash)

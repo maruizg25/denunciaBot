@@ -77,7 +77,7 @@ run-prod:  ## Levanta el API en modo producción local (gunicorn)
 
 worker:  ## Levanta el worker Dramatiq (en otra terminal)
 	$(BIN)/dramatiq app.services.notificacion_service \
-		--processes 1 --threads 2 --queues notificaciones
+		--processes 1 --threads 2 --queues notificaciones cierres
 
 # ---- Tests y calidad --------------------------------------------------------
 

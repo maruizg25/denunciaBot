@@ -28,6 +28,7 @@ from slowapi.errors import RateLimitExceeded
 from slowapi.util import get_remote_address
 
 from app.api.admin import router as admin_router
+from app.api.consulta import router as consulta_router
 from app.api.webhook import router as webhook_router
 from app.config import get_settings
 from app.core.meta_client import cerrar_meta_client
@@ -101,6 +102,7 @@ app.add_exception_handler(RateLimitExceeded, _rate_limit_exceeded_handler)
 # =========================================================================
 
 app.include_router(webhook_router)
+app.include_router(consulta_router)
 app.include_router(admin_router)
 
 

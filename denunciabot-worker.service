@@ -26,12 +26,12 @@ WorkingDirectory=/opt/denunciabot
 EnvironmentFile=/opt/denunciabot/.env
 
 # Dramatiq con 1 proceso y 2 threads — suficiente para volumen institucional.
-# Procesa SOLO la cola "notificaciones" (las únicas que produce el bot).
+# Procesa las colas: notificaciones (SMTP al buzón) y cierres (Meta al ciudadano).
 ExecStart=/opt/denunciabot/.venv/bin/dramatiq \
     app.services.notificacion_service \
     --processes 1 \
     --threads 2 \
-    --queues notificaciones
+    --queues notificaciones cierres
 
 Restart=on-failure
 RestartSec=10s
