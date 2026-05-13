@@ -126,6 +126,16 @@ class Settings(BaseSettings):
     RATE_LIMIT_WEBHOOK: str = "120/minute"
 
     # =========================================================================
+    # Panel admin
+    # =========================================================================
+    # Token compartido para autenticar al panel admin. Si está vacío, el
+    # panel queda DESHABILITADO (devuelve 503). Generar con:
+    #   python -c "import secrets; print(secrets.token_urlsafe(48))"
+    ADMIN_TOKEN: SecretStr = SecretStr("")
+    ADMIN_COOKIE_NAME: str = "denunciabot_admin"
+    ADMIN_COOKIE_MAX_AGE: int = 8 * 60 * 60  # 8 horas
+
+    # =========================================================================
     # Observabilidad
     # =========================================================================
     LOG_FORMAT: Literal["json", "console"] = "json"

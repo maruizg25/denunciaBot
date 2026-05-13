@@ -45,6 +45,9 @@ cryptography==44.0.0
 # ---- Multipart / archivos -------------------------------------------------
 python-multipart==0.0.20
 
+# ---- Templates (panel admin) ----------------------------------------------
+jinja2==3.1.5
+
 # ---- Logging estructurado -------------------------------------------------
 structlog==24.4.0
 

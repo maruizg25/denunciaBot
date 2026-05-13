@@ -86,11 +86,37 @@ make test
 # 7. Levantar el bot (en una terminal)
 make run
 
-# 8. Levantar el worker SMTP (en otra terminal)
+# 8. Levantar el worker SMTP + cierres (en otra terminal)
 make worker
 ```
 
 Lista completa de comandos: `make help`.
+
+### Panel admin (opcional)
+
+Si configuras `ADMIN_TOKEN` en `.env`, el panel queda accesible en
+http://localhost:8000/admin/login. Sin token configurado, los endpoints
+HTML devuelven 503.
+
+```bash
+python -c "import secrets; print('ADMIN_TOKEN:', secrets.token_urlsafe(48))"
+# Copiar el valor a .env y reiniciar
+```
+
+Funcionalidad: listado paginado con filtros, detalle con descifrado
+Fernet al vuelo, cambio de estado auditado en bitácora, sesión cookie
+con HMAC válida por 8 horas.
+
+### Endpoint público de consulta de estado
+
+Los ciudadanos pueden consultar el estado de su denuncia con el código:
+
+```
+GET https://tu-subdominio.gob.ec/alerta/ALR-2026-K7M2QH
+```
+
+Devuelve `{codigo, estado, fecha_registro}` sin datos sensibles.
+Rate-limited a 30/min por IP.
 
 ### Instalación en producción (RHEL 9.7)
 

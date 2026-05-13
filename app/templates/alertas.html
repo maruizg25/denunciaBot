@@ -1,0 +1,110 @@
+{% extends "base.html" %}
+{% block title %}Denuncias — DenunciaBot Admin{% endblock %}
+
+{% block content %}
+<div class="mb-6 flex items-baseline justify-between">
+  <h1 class="text-2xl font-semibold text-gray-800">Denuncias registradas</h1>
+  <div class="text-sm text-gray-600">
+    Mostrando {{ alertas|length }} de {{ total }}
+  </div>
+</div>
+
+{# ---- Filtros ---- #}
+<form method="get" action="/admin/alertas" class="bg-white rounded-lg shadow p-4 mb-6 flex flex-wrap gap-3 items-end">
+  <div>
+    <label class="block text-xs font-medium text-gray-600 mb-1">Estado</label>
+    <select name="estado" class="border border-gray-300 rounded px-2 py-1 text-sm">
+      <option value="">Todos</option>
+      {% for e in estados_validos %}
+        <option value="{{ e }}" {% if filtros.estado == e %}selected{% endif %}>{{ e }}</option>
+      {% endfor %}
+    </select>
+  </div>
+
+  <div>
+    <label class="block text-xs font-medium text-gray-600 mb-1">Código</label>
+    <input
+      type="text"
+      name="codigo"
+      value="{{ filtros.codigo or '' }}"
+      placeholder="ALR-YYYY-XXXXXX"
+      class="border border-gray-300 rounded px-2 py-1 text-sm w-44"
+    >
+  </div>
+
+  <div>
+    <label class="block text-xs font-medium text-gray-600 mb-1">Página</label>
+    <input
+      type="number"
+      name="pagina"
+      value="{{ filtros.pagina }}"
+      min="1"
+      class="border border-gray-300 rounded px-2 py-1 text-sm w-20"
+    >
+  </div>
+
+  <button type="submit" class="bg-blue-600 hover:bg-blue-700 text-white px-3 py-1.5 rounded text-sm">
+    Filtrar
+  </button>
+  <a href="/admin/alertas" class="text-sm text-gray-600 hover:text-gray-900 ml-2">Limpiar</a>
+</form>
+
+{# ---- Tabla ---- #}
+<div class="bg-white rounded-lg shadow overflow-x-auto">
+  <table class="min-w-full divide-y divide-gray-200 text-sm">
+    <thead class="bg-gray-50">
+      <tr class="text-left text-xs font-medium text-gray-600 uppercase tracking-wider">
+        <th class="px-4 py-3">Código</th>
+        <th class="px-4 py-3">Estado</th>
+        <th class="px-4 py-3">Fecha registro</th>
+        <th class="px-4 py-3">Evidencias</th>
+        <th class="px-4 py-3"></th>
+      </tr>
+    </thead>
+    <tbody class="divide-y divide-gray-200">
+      {% for a in alertas %}
+        <tr class="hover:bg-gray-50">
+          <td class="px-4 py-3 font-mono">{{ a.codigo_publico }}</td>
+          <td class="px-4 py-3">
+            <span class="inline-block px-2 py-0.5 rounded text-xs font-medium chip-{{ a.estado|lower|replace('_','-') }}">
+              {{ a.estado }}
+            </span>
+          </td>
+          <td class="px-4 py-3 text-gray-600">{{ a.timestamp_registro.strftime("%Y-%m-%d %H:%M") }}</td>
+          <td class="px-4 py-3 text-center">{{ a.num_evidencias }}</td>
+          <td class="px-4 py-3 text-right">
+            <a href="/admin/alertas/{{ a.id }}" class="text-blue-600 hover:text-blue-800">
+              Ver detalle &rarr;
+            </a>
+          </td>
+        </tr>
+      {% else %}
+        <tr>
+          <td colspan="5" class="px-4 py-8 text-center text-gray-500">
+            No hay denuncias que coincidan con los filtros.
+          </td>
+        </tr>
+      {% endfor %}
+    </tbody>
+  </table>
+</div>
+
+{# ---- Paginación ---- #}
+{% if total > pagina_tamanio %}
+  <div class="mt-4 flex items-center justify-between text-sm">
+    {% if filtros.pagina > 1 %}
+      <a href="?estado={{ filtros.estado or '' }}&codigo={{ filtros.codigo or '' }}&pagina={{ filtros.pagina - 1 }}"
+         class="text-blue-600 hover:text-blue-800">&larr; Anterior</a>
+    {% else %}<span></span>{% endif %}
+
+    <span class="text-gray-600">
+      Página {{ filtros.pagina }} de {{ total_paginas }}
+    </span>
+
+    {% if filtros.pagina < total_paginas %}
+      <a href="?estado={{ filtros.estado or '' }}&codigo={{ filtros.codigo or '' }}&pagina={{ filtros.pagina + 1 }}"
+         class="text-blue-600 hover:text-blue-800">Siguiente &rarr;</a>
+    {% else %}<span></span>{% endif %}
+  </div>
+{% endif %}
+{% endblock %}
