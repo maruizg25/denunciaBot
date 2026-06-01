@@ -130,6 +130,36 @@ class TestInstitucion:
         assert not r.valido
         assert "200" in (r.motivo or "")
 
+    @pytest.mark.parametrize(
+        "texto",
+        [
+            "12345678",        # solo dígitos
+            "@@@@@@@",         # solo símbolos
+            "1234.567",        # dígitos + puntuación
+        ],
+    )
+    def test_sin_letras_es_rechazada(self, texto: str) -> None:
+        r = validar_institucion(texto)
+        assert not r.valido
+        assert "letra" in (r.motivo or "").lower()
+
+    @pytest.mark.parametrize("texto", ["aaaaaaaaaa", "asdfasdfasdfasdf", "ababababab"])
+    def test_repeticion_trivial_rechazada(self, texto: str) -> None:
+        r = validar_institucion(texto)
+        assert not r.valido
+
+    @pytest.mark.parametrize(
+        "texto",
+        [
+            "GAD #5 Sector 12",         # alfanumérico legítimo
+            "IESS Hospital Norte 2025",
+            "Cía. Nac. de Transporte Naranja 4",
+        ],
+    )
+    def test_alfanumerico_legitimo_aceptado(self, texto: str) -> None:
+        r = validar_institucion(texto)
+        assert r.valido
+
 
 # =========================================================================
 # S4 — Descripción
@@ -151,11 +181,15 @@ class TestDescripcion:
         assert not r.valido
 
     def test_limite_inferior(self) -> None:
-        r = validar_descripcion("X" * 30)
+        # Exactamente 30 chars, con palabras y letras reales.
+        r = validar_descripcion("Hechos denunciados en la ciudad.")
         assert r.valido
 
     def test_limite_superior(self) -> None:
-        r = validar_descripcion("X" * 2000)
+        # 2000 chars con palabras realistas repetidas (no monocaracter).
+        base = "Los presuntos hechos de corrupcion ocurrieron en el sector. "
+        texto = (base * 40)[:2000]
+        r = validar_descripcion(texto)
         assert r.valido
 
 

@@ -222,11 +222,45 @@ def validar_aceptacion(
 
 
 # =========================================================================
+# Heurísticas comunes — detectan basura mínima sin bloquear input legítimo
+# =========================================================================
+
+_RE_LETRA = re.compile(r"[A-Za-zÁÉÍÓÚÜÑáéíóúüñ]")
+
+
+def _contar_letras(texto: str) -> int:
+    """Cuenta caracteres alfabéticos (acepta acentos y eñe)."""
+    return len(_RE_LETRA.findall(texto))
+
+
+_RE_REPETICION_PATRON = re.compile(r"(.{2,6})\1+")
+
+
+def _es_repeticion_trivial(texto: str) -> bool:
+    """Detecta cadenas obviamente sin sentido tipo 'aaaaaaa' o 'asdfasdf'.
+
+    Casos detectados:
+      - Un único caracter repetido: 'aaaaaa', 'xxxxxx'.
+      - Patrón corto de 2-6 chars repetido ≥ 2 veces consecutivas en
+        cadenas de ≥ 8 chars: 'asdfasdf', 'ababababab'.
+    """
+    limpio = texto.replace(" ", "").lower()
+    if len(limpio) < 4:
+        return False
+    if len(set(limpio)) == 1:
+        return True
+    if len(limpio) >= 8 and _RE_REPETICION_PATRON.fullmatch(limpio):
+        return True
+    return False
+
+
+# =========================================================================
 # S3 — Institución denunciada
 # =========================================================================
 
 _MIN_INSTITUCION = 3
 _MAX_INSTITUCION = 200
+_MIN_LETRAS_INSTITUCION = 3
 
 
 def validar_institucion(texto: str | None) -> ResultadoValidacion:
@@ -251,6 +285,23 @@ def validar_institucion(texto: str | None) -> ResultadoValidacion:
                 f"(usted envió {len(valor)})."
             ),
         )
+    if _contar_letras(valor) < _MIN_LETRAS_INSTITUCION:
+        return ResultadoValidacion(
+            False,
+            motivo=(
+                "El nombre debe incluir al menos "
+                f"{_MIN_LETRAS_INSTITUCION} letras. Indique la institución, "
+                "dependencia o entidad pública (ej. \"Ministerio de Salud\")."
+            ),
+        )
+    if _es_repeticion_trivial(valor):
+        return ResultadoValidacion(
+            False,
+            motivo=(
+                "El texto ingresado no parece un nombre real. Indique la "
+                "institución, dependencia o entidad pública."
+            ),
+        )
     return ResultadoValidacion(True, valor_normalizado=valor)
 
 
@@ -260,6 +311,10 @@ def validar_institucion(texto: str | None) -> ResultadoValidacion:
 
 _MIN_DESCRIPCION = 30
 _MAX_DESCRIPCION = 2000
+
+
+_MIN_LETRAS_DESCRIPCION = 15
+_MIN_PALABRAS_DESCRIPCION = 5
 
 
 def validar_descripcion(texto: str | None) -> ResultadoValidacion:
@@ -282,6 +337,31 @@ def validar_descripcion(texto: str | None) -> ResultadoValidacion:
             motivo=(
                 f"La descripción no debe exceder {_MAX_DESCRIPCION} "
                 f"caracteres (usted envió {len(valor)})."
+            ),
+        )
+    if _contar_letras(valor) < _MIN_LETRAS_DESCRIPCION:
+        return ResultadoValidacion(
+            False,
+            motivo=(
+                "La descripción debe ser un texto real con al menos "
+                f"{_MIN_LETRAS_DESCRIPCION} letras. Describa los hechos por favor."
+            ),
+        )
+    palabras = [p for p in re.split(r"\s+", valor) if _contar_letras(p) >= 2]
+    if len(palabras) < _MIN_PALABRAS_DESCRIPCION:
+        return ResultadoValidacion(
+            False,
+            motivo=(
+                "Por favor describa los hechos con más detalle "
+                f"(al menos {_MIN_PALABRAS_DESCRIPCION} palabras)."
+            ),
+        )
+    if _es_repeticion_trivial(valor):
+        return ResultadoValidacion(
+            False,
+            motivo=(
+                "El texto no parece una descripción real. Describa los hechos "
+                "denunciados con sus propias palabras."
             ),
         )
     return ResultadoValidacion(True, valor_normalizado=valor)
@@ -390,6 +470,22 @@ def validar_involucrados(texto: str | None) -> ResultadoValidacion:
                 f"(usted envió {len(valor)})."
             ),
         )
+    if _contar_letras(valor) < 3:
+        return ResultadoValidacion(
+            False,
+            motivo=(
+                "Indique nombres o cargos reales, o escriba *no conozco* "
+                "si prefiere omitir esta pregunta."
+            ),
+        )
+    if _es_repeticion_trivial(valor):
+        return ResultadoValidacion(
+            False,
+            motivo=(
+                "El texto no parece nombres reales. Indique los involucrados "
+                "o escriba *no conozco*."
+            ),
+        )
     return ResultadoValidacion(True, valor_normalizado=valor)
 
 
@@ -413,6 +509,23 @@ def validar_perjuicio(texto: str | None) -> ResultadoValidacion:
             motivo=(
                 f"El texto no debe exceder {_MAX_PERJUICIO} caracteres "
                 f"(usted envió {len(valor)})."
+            ),
+        )
+    # Debe contener al menos un dígito (monto) o 3 letras (descripción "entre X y Y")
+    tiene_digito = any(c.isdigit() for c in valor)
+    if not tiene_digito and _contar_letras(valor) < 3:
+        return ResultadoValidacion(
+            False,
+            motivo=(
+                "Indique un monto aproximado (ej. *5000*, *entre 5000 y 10000*) "
+                "o escriba *no aplica* / *no sé*."
+            ),
+        )
+    if _es_repeticion_trivial(valor):
+        return ResultadoValidacion(
+            False,
+            motivo=(
+                "Indique un monto aproximado o escriba *no aplica*."
             ),
         )
     return ResultadoValidacion(True, valor_normalizado=valor)
@@ -454,6 +567,19 @@ def validar_entidad_previa(texto: str | None) -> ResultadoValidacion:
     if len(valor) < 3:
         return ResultadoValidacion(
             False, motivo="Indique un nombre o referencia más completa."
+        )
+    if _contar_letras(valor) < 3:
+        return ResultadoValidacion(
+            False,
+            motivo=(
+                "Indique el nombre de la entidad ante la que denunció "
+                "(ej. *Fiscalía*, *Contraloría*)."
+            ),
+        )
+    if _es_repeticion_trivial(valor):
+        return ResultadoValidacion(
+            False,
+            motivo="Indique el nombre real de la entidad ante la que denunció.",
         )
     if len(valor) > _MAX_ENTIDAD_PREVIA:
         return ResultadoValidacion(
