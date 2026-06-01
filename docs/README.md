@@ -19,6 +19,9 @@ técnico profundo.
 | 04 | [seguridad-y-privacidad](04-seguridad-y-privacidad.md) | Jurídico + Seguridad informática | Validación de cumplimiento LOPDP |
 | 05 | [agenda-y-cuestionario](05-agenda-y-cuestionario.md) | El responsable técnico SERCOP | Para conducir la reunión |
 | 06 | [acta-reunion-plantilla](06-acta-reunion-plantilla.md) | Ambas partes | Para llenar EN VIVO durante la reunión |
+| 07 | [guia-tecnica-dominio](07-guia-tecnica-dominio.md) | **Mau (para dominar) + IT institucional** | Para entender el sistema, explicarlo a TI y aprender a extenderlo |
+| 08 | [agenda-ti-infraestructura](08-agenda-ti-infraestructura.md) | Mau (conductor) | Reunión con TI Secretaría para acordar infraestructura |
+| 09 | [acta-ti-plantilla](09-acta-ti-plantilla.md) | Ambas partes | Llenar EN VIVO durante reunión con TI |
 
 ## Cómo usarlos
 

@@ -1,5 +1,14 @@
 # Agenda de Reunión + Cuestionario de Levantamiento de Requisitos
 
+> **Estado del proyecto al momento de esta reunión (actualizado mayo–junio 2026):**
+>
+> - El bot está **técnicamente operativo end-to-end**: integración con Meta WhatsApp Cloud API validada, flujo completo de 8 preguntas funcionando, una denuncia de prueba registrada con código `ALR-2026-MJY3LW`.
+> - 180 pruebas unitarias en verde, validadores reforzados, cifrado Fernet + bitácora inmutable operativos, panel admin y consulta pública funcionales.
+> - **Lo pendiente NO es técnico** sino **institucional**: aprobación de textos por comunicación/legal, definiciones funcionales de la Secretaría (este cuestionario), e infraestructura institucional (ver doc. 08 para TI).
+> - Si la Secretaría tiene representación técnica, lleva además el doc. 07 (guía técnica de dominio) y considera coordinar una reunión paralela con TI usando doc. 08.
+
+---
+
 **Reunión:** Levantamiento de requisitos funcionales y validación de
 flujo — DenunciaBot.
 
