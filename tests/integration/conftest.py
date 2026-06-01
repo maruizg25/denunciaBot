@@ -58,7 +58,7 @@ async def db_session_commit() -> AsyncGenerator[AsyncSession, None]:
         await session.close()
 
 
-@pytest_asyncio.fixture(scope="session", autouse=True)
+@pytest_asyncio.fixture(scope="session", loop_scope="session", autouse=True)
 async def _teardown_session() -> AsyncGenerator[None, None]:
     """Al final de toda la sesión de tests, cierra recursos."""
     yield

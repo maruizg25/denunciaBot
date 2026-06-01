@@ -52,15 +52,15 @@ def _env_test() -> Iterator[None]:
         # Clave Fernet válida (44 chars base64) generada ad-hoc para tests
         "DENUNCIABOT_MASTER_KEY": "cdvWmqdEQH1pPRJB8wEszEHTNH4-OzwUe6cqMRRWS7s=",
         "DENUNCIABOT_PHONE_PEPPER": "pepper-test-1234567890abcdef0123456789",
-        "DATABASE_URL": "postgresql+asyncpg://denunciabot:test@localhost:5432/denunciabot_test",
+        "DATABASE_URL": "postgresql+asyncpg://denunciabot:dev@localhost:5432/denunciabot",
         "REDIS_URL": "redis://localhost:6379/15",  # DB 15 para no chocar con desarrollo
         "META_PHONE_NUMBER_ID": "123456789",
         "META_ACCESS_TOKEN": "test-access-token",
         "META_APP_SECRET": "test-app-secret",
         "META_VERIFY_TOKEN": "test-verify-token",
         "SMTP_HOST": "localhost",
-        "SMTP_FROM": "denunciabot@test.local",
-        "SMTP_TO": "destino@test.local",
+        "SMTP_FROM": "denunciabot@example.com",
+        "SMTP_TO": "destino@example.com",
         "EVIDENCIAS_DIR": "/tmp/denunciabot_test_evidencias",
         "CLAMAV_ENABLED": "false",
         # Rate limit absurdamente alto para tests — no debe disparar.
