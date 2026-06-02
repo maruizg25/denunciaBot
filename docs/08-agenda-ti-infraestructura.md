@@ -3,7 +3,7 @@
 **Objetivo:** acordar el provisionamiento de la infraestructura institucional necesaria para llevar DenunciaBot a producción.
 
 **Asistentes esperados:**
-- **SERCOP**: Jonathan Mauricio Ruiz Sánchez (responsable técnico DenunciaBot), Paul *[Apellido]* (jefe directo) — opcional.
+- **SERCOP**: Jonathan Mauricio Ruiz Sánchez (responsable técnico DenunciaBot), Paúl Vásquez (jefe directo) — opcional.
 - **Secretaría General de Integridad Pública**: Coordinador de Infraestructura TI, Administrador de servidores Linux, DBA PostgreSQL, Administrador de correo, responsable de seguridad de red (si aplica).
 
 **Duración estimada:** 60 minutos.
@@ -130,7 +130,8 @@ Anticipa estas preguntas. Respuestas sugeridas en la columna derecha.
 | ¿Cómo rotan secretos? | Procedimiento documentado en `RUNBOOK.md` sección 7 (master key Fernet). Pasos manuales coordinados con SERCOP. |
 | ¿Qué hace el bot si Meta se cae? | Las denuncias en curso se mantienen en estado intermedio. Cuando Meta vuelve, el ciudadano puede continuar. Sesiones que pasan más de 5 min sin avance se descartan automáticamente. |
 | ¿Hay límites de tasa? | Sí, 120 req/min por IP a nivel del bot (slowapi). Meta tiene los suyos (~1000 mensajes/segundo). |
-| ¿Cómo se accede al panel admin? | URL: `https://denuncia.secretaria.gob.ec/admin/login`. Token compartido entregado por canal seguro. Sesión expira en 8h. |
+| ¿Cómo consume la Secretaría los datos? | **Modelo objetivo:** SERCOP expone API REST documentada (`/api/v1/alertas`, `/api/v1/audit-trail`, etc.) con autenticación por `X-API-Key`. La Secretaría desarrolla su propio frontend integrado con su SSO e identidad institucional. Ver doc. 11 — contrato API. |
+| ¿Hay panel admin SERCOP también? | Sí, queda como **fallback institucional** durante la transición mientras la Secretaría termina su frontend. Mismo backend, autenticado por token compartido. No es la solución de largo plazo. |
 
 ---
 
@@ -163,6 +164,9 @@ Solo si hay equipo / proyector. Mostrar:
 | Entregar credenciales por canal seguro | TI Secretaría | _____ | [ ] |
 | Whitelisting en SOC de procesos del bot | Seguridad | _____ | [ ] |
 | Desplegar bot en RHEL (cargo SERCOP) | SERCOP — Mau | _____ | [ ] |
+| Designar equipo de desarrollo de la Secretaría para consumir API | Coordinador Secretaría | _____ | [ ] |
+| Revisar y aceptar contrato API (doc. 11) con devs de la Secretaría | Ambos | _____ | [ ] |
+| Emitir y entregar `X-API-Key` inicial para entornos dev/prod | SERCOP — Mau | _____ | [ ] |
 | Validación de despliegue end-to-end | Ambos | _____ | [ ] |
 
 ---

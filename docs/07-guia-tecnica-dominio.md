@@ -1,5 +1,7 @@
 # Guía técnica de dominio — DenunciaBot
 
+> **Nota arquitectónica (junio 2026):** el **modelo objetivo** de consumo por la Secretaría es **API REST documentada** (ver [`docs/11-contrato-api-rest.md`](11-contrato-api-rest.md)). La Secretaría desarrolla su propio frontend con su SSO e identidad institucional. El panel administrativo web descrito más abajo se mantiene como **fallback** durante la transición.
+>
 > Documento para **dominar el sistema** y **explicarlo a otros** (IT institucional, Coordinador, auditores). No reemplaza a:
 > - [`docs/03-arquitectura-tecnica.md`](03-arquitectura-tecnica.md) — referencia detallada de arquitectura.
 > - [`docs/04-seguridad-y-privacidad.md`](04-seguridad-y-privacidad.md) — cumplimiento legal y custodia.

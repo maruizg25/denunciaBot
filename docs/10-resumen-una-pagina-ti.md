@@ -20,7 +20,8 @@ Chatbot institucional sobre **WhatsApp** que recolecta denuncias ciudadanas de c
 | Integración Meta WhatsApp Cloud API | ✅ Validada end-to-end |
 | Cifrado de campos sensibles (Fernet) | ✅ Implementado |
 | Bitácora inmutable a nivel de BD | ✅ Implementada |
-| Panel administrativo web | ✅ Funcional |
+| Panel administrativo web (fallback) | ✅ Funcional |
+| API REST para consumo de la Secretaría | 🔧 Próximo sprint |
 | Consulta pública por código | ✅ Funcional |
 | Notificación SMTP institucional | ✅ Lista, depende de buzón |
 | Backups automatizados + métricas Prometheus | ✅ Configurados |
@@ -104,9 +105,17 @@ Chatbot institucional sobre **WhatsApp** que recolecta denuncias ciudadanas de c
 
 ---
 
+## Modelo de consumo (separación de responsabilidades)
+
+- **SERCOP entrega:** bot conversacional + base de datos + **API REST documentada, autenticada y auditada** (`/api/v1/alertas`, `/api/v1/audit-trail`, etc.) para que la Secretaría consuma desde su propio frontend.
+- **Secretaría desarrolla:** interfaz operativa propia integrada con su SSO institucional, identidad visual y procedimientos internos de revisión.
+- **Autenticación API:** clave por consumidor (`X-API-Key`) emitida y rotada por SERCOP; cada llamada queda en bitácora.
+- **Panel admin SERCOP:** disponible como fallback institucional mientras la Secretaría arma su frontend.
+
 ## Compromiso de SERCOP
 
 - Despliegue inicial en el servidor de la Secretaría.
+- **Entrega de contrato API REST documentado** (ver doc. 11) para el equipo de desarrollo de la Secretaría.
 - Acompañamiento durante la primera semana de operación.
 - Documentación operativa (`RUNBOOK.md`, doc. 07).
 - Capacitación al equipo de revisión de denuncias.
@@ -118,7 +127,7 @@ Chatbot institucional sobre **WhatsApp** que recolecta denuncias ciudadanas de c
 | Quién | Cargo | Correo |
 |---|---|---|
 | Jonathan Mauricio Ruiz Sánchez | Analista de Operaciones de Innovación Tecnológica 2 — SERCOP | jonathan.ruiz@sercop.gob.ec |
-| Paul *[Apellido]* | Jefe directo SERCOP | _____________________________ |
+| Paúl Vásquez | Jefe directo SERCOP | _____________________________ |
 
 **Repositorio:** `github.com/maruizg25/denunciabot` (público — sin secretos en código)
 

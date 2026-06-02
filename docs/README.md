@@ -22,6 +22,8 @@ técnico profundo.
 | 07 | [guia-tecnica-dominio](07-guia-tecnica-dominio.md) | **Mau (para dominar) + IT institucional** | Para entender el sistema, explicarlo a TI y aprender a extenderlo |
 | 08 | [agenda-ti-infraestructura](08-agenda-ti-infraestructura.md) | Mau (conductor) | Reunión con TI Secretaría para acordar infraestructura |
 | 09 | [acta-ti-plantilla](09-acta-ti-plantilla.md) | Ambas partes | Llenar EN VIVO durante reunión con TI |
+| 10 | [resumen-una-pagina-ti](10-resumen-una-pagina-ti.md) | **Cada asistente** | Handout 1 página, entregar a cada uno en la apertura |
+| 11 | [contrato-api-rest](11-contrato-api-rest.md) | **Dev team de la Secretaría** | Contrato API para consumo desde el frontend institucional |
 
 ## Cómo usarlos
 
